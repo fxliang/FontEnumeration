@@ -1,0 +1,78 @@
+name: CI
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - '*'
+    tags:
+      - '![0-9]+.*'
+    paths:
+      - '**/**'
+      - '!*.md'
+      - '!.gitignore'
+  pull_request:
+
+jobs:
+
+  build:
+    runs-on: windows-2019
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+
+      - name: Checkout last commit
+        uses: actions/checkout@v4
+
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          actions-cache-folder: '.xmake-cache'
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build FontEnumeration
+        id: build_FontEnumeration
+        run: |
+          xmake f -a ${{ matrix.arch }} && xmake
+          move FontEnumeration.exe FontEnumeration.${{ matrix.arch }}.exe
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FontEnumeration.${{ matrix.arch }}
+          path: ./FontEnumeration.${{ matrix.arch }}.exe
+
+  create_release:
+    needs: build
+    runs-on: windows-2019
+    steps:
+      - name: Checkout last commit
+        uses: actions/checkout@v4
+
+      - name: Download x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: FontEnumeration.x64
+          path: ./artifacts
+
+      - name: Download x86 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: FontEnumeration.x86
+          path: ./artifacts
+
+      - name: Create Nightly release
+        if: ${{ github.repository == 'fxliang/FontEnumeration' && github.ref == 'refs/heads/master' }}
+        uses: marvinpinto/action-automatic-releases@latest
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          automatic_release_tag: latest
+          prerelease: true
+          title: "Nightly Build"
+          files: |
+            ./artifacts/FontEnumeration.x64.exe
+            ./artifacts/FontEnumeration.x86.exe

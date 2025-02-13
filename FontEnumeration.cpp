@@ -1,177 +1,73 @@
-/************************************************************************
- *  This file is part of the Microsoft Windows SDK Code Samples.
- * 
- *  Copyright (C) Microsoft Corporation.  All rights reserved.
- * 
- * This source code is intended only as a supplement to Microsoft
- * Development Tools and/or on-line documentation.  See these other
- * materials for detailed information regarding Microsoft code samples.
- * 
- * THIS CODE AND INFORMATION ARE PROVIDED AS IS WITHOUT WARRANTY OF ANY
- * KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A
- * PARTICULAR PURPOSE.
- * 
- ************************************************************************/
-
-
 #include <dwrite.h>
-#include <string.h>
-#include <stdio.h>
-#include <new>
 #include <iostream>
+#include <memory>
+#include <wrl.h>
 
-// SafeRelease inline function.
-template <class T> inline void SafeRelease(T **ppT)
-{
-    if (*ppT)
-    {
-        (*ppT)->Release();
-        *ppT = NULL;
-    }
+using namespace Microsoft::WRL;
+#define WHITE (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE)
+#define RED (FOREGROUND_RED)
+#define BLUE (FOREGROUND_BLUE)
+#define OUTPUT(color)                                                          \
+  SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),                     \
+                          FOREGROUND_INTENSITY | color);
+struct ComException {
+  HRESULT result;
+  ComException(HRESULT const value) : result(value) {}
+};
+#define HR(value)                                                              \
+  if (FAILED(value))                                                           \
+  throw ComException(value)
+
+int wmain(int argc, wchar_t *argv[]) {
+  wchar_t locale[LOCALE_NAME_MAX_LENGTH] = {0};
+  if (!GetUserDefaultLocaleName(locale, LOCALE_NAME_MAX_LENGTH)) {
+    DWORD errorCode = GetLastError();
+    wchar_t errorMsg[512] = {0};
+    FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                  NULL, errorCode, 0, errorMsg,
+                  sizeof(errorMsg) / sizeof(wchar_t), NULL);
+    std::wcout << L"Error Code: " << std::hex << errorCode << ", Error Message"
+               << errorMsg << std::endl;
+    return errorCode;
+  }
+  ComPtr<IDWriteFactory> pDWriteFactory;
+  HR(DWriteCreateFactory(
+      DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+      reinterpret_cast<IUnknown **>(pDWriteFactory.ReleaseAndGetAddressOf())));
+  ComPtr<IDWriteFontCollection> pFontCollection;
+  // Get the system font collection.
+  HR(pDWriteFactory->GetSystemFontCollection(
+      pFontCollection.ReleaseAndGetAddressOf()));
+  UINT32 familyCount = 0;
+  // Get the number of font families in the collection.
+  familyCount = pFontCollection->GetFontFamilyCount();
+  ComPtr<IDWriteFontFamily> pFontFamily;
+  ComPtr<IDWriteLocalizedStrings> pFamilyNames;
+  const auto func = [&](const wchar_t *localeName, WORD color) -> void {
+    UINT32 index = 0;
+    BOOL exists = false;
+    HR(pFamilyNames->FindLocaleName(localeName, &index, &exists));
+    // If the specified locale doesn't exist, select the first on the list.
+    index = !exists ? 0 : index;
+    UINT32 length = 0;
+    HR(pFamilyNames->GetStringLength(index, &length));
+    std::unique_ptr<wchar_t[]> name(new wchar_t[length + 1]);
+    HR(!name ? E_OUTOFMEMORY : S_OK);
+    HR(pFamilyNames->GetString(index, name.get(), length + 1));
+    std::wcout << localeName << L" family name:\t";
+    OUTPUT(color);
+    WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), name.get(), length + 1, 0, 0);
+    OUTPUT(WHITE);
+    std::cout << std::endl;
+  };
+  std::cout << "\n-------------------------------------------------------\n";
+  for (UINT32 i = 0; i < familyCount; ++i) {
+    HR(pFontCollection->GetFontFamily(i, pFontFamily.ReleaseAndGetAddressOf()));
+    HR(pFontFamily->GetFamilyNames(pFamilyNames.ReleaseAndGetAddressOf()));
+    func(locale, RED);
+    func(L"en-US", BLUE);
+    std::cout << "-------------------------------------------------------\n";
+  }
+  system("pause");
+  return 0;
 }
-
-void wmain()
-{
-    IDWriteFactory* pDWriteFactory = NULL;
-
-    HRESULT hr = DWriteCreateFactory(
-            DWRITE_FACTORY_TYPE_SHARED,
-            __uuidof(IDWriteFactory),
-            reinterpret_cast<IUnknown**>(&pDWriteFactory)
-            );
-
-    IDWriteFontCollection* pFontCollection = NULL;
-
-    // Get the system font collection.
-    if (SUCCEEDED(hr))
-    {
-        hr = pDWriteFactory->GetSystemFontCollection(&pFontCollection);
-    }
-
-    UINT32 familyCount = 0;
-
-    // Get the number of font families in the collection.
-    if (SUCCEEDED(hr))
-    {
-        familyCount = pFontCollection->GetFontFamilyCount();
-    }
-
-    for (UINT32 i = 0; i < familyCount; ++i)
-    {
-        IDWriteFontFamily* pFontFamily = NULL;
-
-        // Get the font family.
-        if (SUCCEEDED(hr))
-        {
-            hr = pFontCollection->GetFontFamily(i, &pFontFamily);
-        }
-
-        IDWriteLocalizedStrings* pFamilyNames = NULL;
-        
-        // Get a list of localized strings for the family name.
-        if (SUCCEEDED(hr))
-        {
-            hr = pFontFamily->GetFamilyNames(&pFamilyNames);
-        }
-
-        UINT32 index = 0;
-        BOOL exists = false;
-        
-        wchar_t localeName[LOCALE_NAME_MAX_LENGTH];
-
-        if (SUCCEEDED(hr))
-        {
-            // Get the default locale for this user.
-            int defaultLocaleSuccess = GetUserDefaultLocaleName(localeName, LOCALE_NAME_MAX_LENGTH);
-
-            // If the default locale is returned, find that locale name, otherwise use "en-us".
-            if (defaultLocaleSuccess)
-            {
-				hr = pFamilyNames->FindLocaleName(localeName, &index, &exists);
-				// If the specified locale doesn't exist, select the first on the list.
-				if (!exists)
-					index = 0;
-
-				UINT32 length = 0;
-
-				// Get the string length.
-				if (SUCCEEDED(hr))
-				{
-					hr = pFamilyNames->GetStringLength(index, &length);
-				}
-
-				// Allocate a string big enough to hold the name.
-				wchar_t* name = new (std::nothrow) wchar_t[length + 1];
-				if (name == NULL)
-				{
-					hr = E_OUTOFMEMORY;
-				}
-
-				// Get the family name.
-				if (SUCCEEDED(hr))
-				{
-					hr = pFamilyNames->GetString(index, name, length + 1);
-				}
-				if (SUCCEEDED(hr))
-				{
-					// Print out the family name.
-					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_INTENSITY | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);//设置三色相加
-					std::cout << "local family name:\t";
-					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_INTENSITY | FOREGROUND_RED);
-					WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), name, length + 1, 0, 0);
-					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_INTENSITY | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);//设置三色相加
-					std::cout << "\nen-us family name:\t";
-				}
-
-
-				delete[] name;
-            }
-			// en-us font family name
-            {
-                hr = pFamilyNames->FindLocaleName(L"en-us", &index, &exists);
-				// If the specified locale doesn't exist, select the first on the list.
-				if (!exists)
-					index = 0;
-
-				UINT32 length = 0;
-
-				// Get the string length.
-				if (SUCCEEDED(hr))
-				{
-					hr = pFamilyNames->GetStringLength(index, &length);
-				}
-
-				// Allocate a string big enough to hold the name.
-				wchar_t* name = new (std::nothrow) wchar_t[length + 1];
-				if (name == NULL)
-				{
-					hr = E_OUTOFMEMORY;
-				}
-
-				// Get the family name.
-				if (SUCCEEDED(hr))
-				{
-					hr = pFamilyNames->GetString(index, name, length + 1);
-				}
-				if (SUCCEEDED(hr))
-				{
-					// Print out the family name.
-					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_INTENSITY | FOREGROUND_BLUE);
-					WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), name, length + 1, 0, 0);
-					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_INTENSITY | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);//设置三色相加
-					std::cout << "\n-----------------------------------------------\n";
-				}
-				delete[] name;
-            }
-				SafeRelease(&pFontFamily);
-				SafeRelease(&pFamilyNames);
-        }
-        
-    }
-	
-	SafeRelease(&pFontCollection);
-	SafeRelease(&pDWriteFactory);
-	system("pause");
-}
-
