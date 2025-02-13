@@ -9,6 +9,10 @@ target('FontEnumeration')
     add_ldflags('-static-libgcc -static-libstdc++ -static', {force=true})
     add_ldflags("-municode", {force = true})
   end
+  on_load(function(target)
+    target:set("filename", "FontEnumeration."..target:arch()..".exe")
+  end)
+
   after_build(function(target)
     print("copy " .. path.join(target:targetdir(), target:filename()) .. " to $(projectdir)")
     os.trycp(path.join(target:targetdir(), target:filename()), "$(projectdir)")

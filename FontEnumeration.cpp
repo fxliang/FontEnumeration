@@ -1,3 +1,4 @@
+#include "utils.h"
 #include <dwrite.h>
 #include <iostream>
 #include <memory>
@@ -10,24 +11,13 @@ using namespace Microsoft::WRL;
 #define OUTPUT(color)                                                          \
   SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),                     \
                           FOREGROUND_INTENSITY | color);
-struct ComException {
-  HRESULT result;
-  ComException(HRESULT const value) : result(value) {}
-};
-#define HR(value)                                                              \
-  if (FAILED(value))                                                           \
-  throw ComException(value)
 
 int wmain(int argc, wchar_t *argv[]) {
   wchar_t locale[LOCALE_NAME_MAX_LENGTH] = {0};
   if (!GetUserDefaultLocaleName(locale, LOCALE_NAME_MAX_LENGTH)) {
     DWORD errorCode = GetLastError();
-    wchar_t errorMsg[512] = {0};
-    FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                  NULL, errorCode, 0, errorMsg,
-                  sizeof(errorMsg) / sizeof(wchar_t), NULL);
     std::wcout << L"Error Code: " << std::hex << errorCode << ", Error Message"
-               << errorMsg << std::endl;
+               << StrzHr(errorCode) << std::endl;
     return errorCode;
   }
   ComPtr<IDWriteFactory> pDWriteFactory;
